@@ -20,6 +20,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
 import time
 from .PODEM import PODEM
 from .Circuit import Circuit
@@ -51,24 +52,46 @@ def main():
         help="The file to save the detailed PODEM report",
         default=None,
     )
+    parser.add_argument(
+        "-a",
+        "--algorithm",
+        type=str,
+        default="advanced",
+        choices=["basic", "advanced", "rl"],
+        help="Select the PODEM search policy.",
+    )
+    parser.add_argument(
+        "--rl_checkpoint",
+        type=str,
+        default=None,
+        help="Optional checkpoint path for the RL-guided PODEM prototype.",
+    )
 
     ## Parse arguments
     args = parser.parse_args()
     input_file = args.input_file
     output_file = args.output_file
     report_file = args.report_file
+    algorithm = args.algorithm
+    rl_checkpoint = args.rl_checkpoint
+    if rl_checkpoint:
+        rl_checkpoint = os.path.abspath(rl_checkpoint)
 
     # Create Circuit object from the input file
     circuit = Circuit(input_file)
 
     # Create PODEM agent and pass the circuit
-    podem_agent = PODEM(circuit=circuit, output_file=output_file)
+    podem_agent = PODEM(
+        circuit=circuit,
+        output_file=output_file,
+        rl_checkpoint_path=rl_checkpoint,
+    )
 
     # Start timing the PODEM computation
     start_time = time.time()
 
     # Compute the PODEM algorithm
-    podem_agent.compute(algorithm="advanced")
+    podem_agent.compute(algorithm=algorithm)
 
     # End timing
     end_time = time.time()

@@ -21,6 +21,8 @@ from .DAlgebra import D_Value
 import math
 from collections import Counter
 
+from .RLGuidedPPO import RLGuidedPPOAgent
+
 
 class PODEM:
     """
@@ -28,7 +30,7 @@ class PODEM:
 
     """
 
-    def __init__(self, circuit, output_file):
+    def __init__(self, circuit, output_file, rl_checkpoint_path=None):
         """
         Initializes a PODEM object.
 
@@ -55,6 +57,38 @@ class PODEM:
         self.uncovered_faults = 0
         self.failures = 0
         self.fault_coverage = 0
+        self.total_backtracks = 0
+        self.current_fault_backtracks = 0
+        self.total_backtrace_steps = 0
+        self.current_fault_backtrace_steps = 0
+        self.per_fault_metrics = []
+        self.rl_agent = None
+        self.rl_step_penalty = -0.01
+        self.rl_backtrack_penalty = -0.1
+        self.rl_success_reward = 1.0
+        self.rl_failure_reward = -1.0
+        self.rl_propagation_progress_reward = 0.02
+        self.rl_propagation_blocked_penalty = -0.05
+        self.rl_propagation_success_bonus = 0.05
+        self.rl_checkpoint_path = rl_checkpoint_path
+        self.pending_propagation_step_idx = None
+        self.pending_backtrace_step_idx = None
+
+    def init_rl_agent(self):
+        max_backtrace_candidates = max(
+            1,
+            max(len(gate.input_gates) for gate in self.circuit.gates.values()),
+        )
+        self.rl_agent = RLGuidedPPOAgent(
+            gate_type_to_idx=self.circuit.gate_type_to_idx,
+            max_level=self.circuit.max_level,
+            max_backtrace_candidates=max_backtrace_candidates,
+        )
+        if self.rl_checkpoint_path:
+            try:
+                self.rl_agent.load(self.rl_checkpoint_path)
+            except FileNotFoundError:
+                pass
 
     def compute(self, algorithm="basic"):
         """
@@ -70,6 +104,11 @@ class PODEM:
         """
 
         self.circuit.calculate_SCOAP()
+        self.total_backtracks = 0
+        self.current_fault_backtracks = 0
+        self.total_backtrace_steps = 0
+        self.current_fault_backtrace_steps = 0
+        self.per_fault_metrics = []
         if algorithm == "basic":
             for fault in self.circuit.faults:
                 self.init_PODEM()
@@ -83,12 +122,17 @@ class PODEM:
                 # else:
                 #    print("Fault: ", fault)
                 #    print("test vector: NOT FOUND ")
-        elif algorithm == "advanced":
+        elif algorithm in {"advanced", "rl"}:
+            use_rl = algorithm == "rl"
+            if use_rl and self.rl_agent is None:
+                self.init_rl_agent()
             test_vectors = []  # Initialize an empty list to store the test vectors
             total_faults = len(self.circuit.faults)  # Total number of faults to process
-            progress_threshold = total_faults // 20  # Every 5% of total faults
+            progress_threshold = max(1, total_faults // 20)  # Every 5% of total faults
 
             for idx, fault in enumerate(self.circuit.faults):
+                self.current_fault_backtracks = 0
+                self.current_fault_backtrace_steps = 0
                 fault_site = fault[0]
                 self.fault_gate = self.circuit.gates[fault_site]
                 self.fault_gate.faulty = True
@@ -97,11 +141,25 @@ class PODEM:
                     self.fault_gate.fault_value = D_Value.ZERO
                 elif fault[1] == 1:
                     self.fault_value = D_Value.ONE
-                    self.fault_gate.fault_value = D_Value.ONE
+                self.fault_gate.fault_value = D_Value.ONE
 
                 self.init_PODEM()
-                ret = self.advanced_PODEM()
+                ret = self.advanced_PODEM(use_rl=use_rl)
                 self.fault_gate.faulty = False
+                if use_rl:
+                    final_reward = (
+                        self.rl_success_reward if ret else self.rl_failure_reward
+                    ) - 0.05 * self.current_fault_backtracks
+                    self.rl_agent.finish_episode(final_reward)
+                    self.rl_agent.update()
+                self.per_fault_metrics.append(
+                    {
+                        "fault": self.format_fault(fault),
+                        "backtracks": self.current_fault_backtracks,
+                        "backtrace_steps": self.current_fault_backtrace_steps,
+                        "detected": ret,
+                    }
+                )
                 if ret == True:
                     self.uncovered_faults += 1
                     success_vector = self.ret_success_vector()  # Get the test vector
@@ -116,7 +174,12 @@ class PODEM:
                     self.failures += 1
 
                 # Print progress bar for every 5% completion
-                print(f"idx: {idx} / {total_faults}")
+                print(
+                    f"idx: {idx} / {total_faults}, "
+                    f"fault: {self.format_fault(fault)}, "
+                    f"#B-track: {self.current_fault_backtracks}, "
+                    f"#B-trace: {self.current_fault_backtrace_steps}"
+                )
                 if (idx + 1) % progress_threshold == 0 or idx == total_faults - 1:
                     percentage_done = (idx + 1) / total_faults * 100
                     print(f"Progress: {percentage_done:.2f}% done")
@@ -129,8 +192,14 @@ class PODEM:
             with open(self.output_file, "w") as f:
                 f.write(header_pin_names + "\n")
                 f.writelines(test_vectors)
+            if use_rl and self.rl_checkpoint_path:
+                self.rl_agent.save(self.rl_checkpoint_path)
 
         return
+
+    def format_fault(self, fault):
+        stuck_at_value = f"sa{fault[1]}"
+        return f"{fault[0]} {stuck_at_value}"
 
 
     def init_PODEM(self):
@@ -140,6 +209,8 @@ class PODEM:
         This function iterates through all the gates in the circuit and sets their output to X.
         """
         self.fault_is_activated = False
+        self.pending_propagation_step_idx = None
+        self.pending_backtrace_step_idx = None
         for gate in self.circuit.gates.values():
             # Set the output of each gate to X
             gate.value = D_Value.X
@@ -502,7 +573,7 @@ class PODEM:
         elif value == D_Value.ONE:
             return D_Value.ZERO
 
-    def get_objective(self):
+    def get_objective(self, use_rl=False):
         """
         This method determines the objective gate and its value based on the current state of the circuit.
 
@@ -539,7 +610,13 @@ class PODEM:
                 return None, None
 
             # Find the gate in the D frontier with the smallest CCb value
-            g = min(self.D_Frontier, key=lambda gate: gate.CCb)
+            if use_rl and len(self.D_Frontier) > 1:
+                g = self.rl_agent.select_propagation_action(self.D_Frontier)
+                self.pending_propagation_step_idx = self.rl_agent.last_selected_step_idx
+                self.rl_agent.add_reward(self.rl_step_penalty)
+            else:
+                g = min(self.D_Frontier, key=lambda gate: gate.CCb)
+                self.pending_propagation_step_idx = None
 
             objective_gate = None
             objective_value = None
@@ -586,6 +663,8 @@ class PODEM:
 
         # Traverse backward from the objective gate
         while target_PI.type != "input_pin":
+            self.current_fault_backtrace_steps += 1
+            self.total_backtrace_steps += 1
 
             # If the target_PI has an inversion parity, flip the target_PI_value
             if target_PI.inversion_parity:
@@ -608,7 +687,35 @@ class PODEM:
         # Return the target primary input gate and value
         return target_PI, target_PI_value
 
-    def advanced_PODEM(self):
+    def backtrace_rl(self, objective_gate, objective_value):
+        target_gate = objective_gate
+        target_value = objective_value
+        self.pending_backtrace_step_idx = None
+
+        while target_gate.type != "input_pin":
+            self.current_fault_backtrace_steps += 1
+            self.total_backtrace_steps += 1
+
+            if target_gate.inversion_parity:
+                target_value = self.oppositeVal(target_value)
+
+            candidate_gates = [
+                gate for gate in target_gate.input_gates if gate.value == D_Value.X
+            ]
+            if not candidate_gates:
+                break
+            if len(candidate_gates) == 1:
+                target_gate = candidate_gates[0]
+            else:
+                target_gate = self.rl_agent.select_backtrace_action(
+                    target_gate, candidate_gates
+                )
+                self.pending_backtrace_step_idx = self.rl_agent.last_selected_step_idx
+                self.rl_agent.add_reward(self.rl_step_penalty)
+
+        return target_gate, target_value
+
+    def advanced_PODEM(self, use_rl=False):
         """
         Recursively attempts to find a test vector that satisfies all the primary outputs of the circuit.
 
@@ -621,7 +728,7 @@ class PODEM:
             return True
 
         # Get the objective gate and its value
-        objective_gate, objective_value = self.get_objective()
+        objective_gate, objective_value = self.get_objective(use_rl=use_rl)
 
         # If no objective gate is found, return False
         # It is not possible to find a test vector that uncovers the fault
@@ -629,9 +736,14 @@ class PODEM:
             return False
 
         # Backtrace to find the primary input that affects the objective gate
-        target_PI, target_PI_value = self.backtrace_advanced(
-            objective_gate, objective_value
-        )
+        if use_rl:
+            target_PI, target_PI_value = self.backtrace_rl(
+                objective_gate, objective_value
+            )
+        else:
+            target_PI, target_PI_value = self.backtrace_advanced(
+                objective_gate, objective_value
+            )
 
         # Set the value of the target primary input
         target_PI.value = target_PI_value
@@ -639,21 +751,45 @@ class PODEM:
         # Imply the value to the target primary input
         self.imply(target_PI)
 
+        if use_rl and self.rl_agent is not None and self.pending_propagation_step_idx is not None:
+            self.generate_d_frontier()
+            if self.check_error_at_primary_outputs():
+                self.rl_agent.add_reward_to_step(
+                    self.pending_propagation_step_idx,
+                    self.rl_propagation_success_bonus,
+                )
+            elif len(self.D_Frontier) > 0:
+                self.rl_agent.add_reward_to_step(
+                    self.pending_propagation_step_idx,
+                    self.rl_propagation_progress_reward,
+                )
+            else:
+                self.rl_agent.add_reward_to_step(
+                    self.pending_propagation_step_idx,
+                    self.rl_propagation_blocked_penalty,
+                )
+            self.pending_propagation_step_idx = None
+
         # Recursively call advanced_PODEM
-        if self.advanced_PODEM():
+        if self.advanced_PODEM(use_rl=use_rl):
             return True
 
-        # Backtracking
-        # If the first attempt fails, try the other possible value for the target primary input
+        # Count one backtrack when PODEM flips the current PI assignment
+        # after the first recursive branch fails.
+        self.current_fault_backtracks += 1
+        self.total_backtracks += 1
+        if use_rl and self.rl_agent is not None:
+            self.rl_agent.add_reward_to_step(
+                self.pending_backtrace_step_idx, self.rl_backtrack_penalty
+            )
         target_PI_value = self.oppositeVal(target_PI_value)
+        target_PI.value = target_PI_value
         self.imply(target_PI)
 
-        if self.advanced_PODEM():
+        if self.advanced_PODEM(use_rl=use_rl):
             return True
 
-        # Backtracking
-        # If both attempts fail, release the target primary input as unknown
-        target_PI_value = D_Value.X
+        target_PI.value = D_Value.X
         self.imply(target_PI)
 
         return False
@@ -673,6 +809,9 @@ class PODEM:
             self.fault_coverage = 0
         else:
             self.fault_coverage = (self.uncovered_faults / total_faults) * 100
+        undetected_fault_percentage = (
+            (self.failures / total_faults) * 100 if total_faults else 0
+        )
 
         # Gather statistics for the report
         total_cells = len(self.circuit.gates)
@@ -683,8 +822,11 @@ class PODEM:
 
         Total Faults Tested     : {total_faults}
         Uncovered Faults        : {self.uncovered_faults}
-        Failures                : {self.failures}
+        Undetected Faults       : {self.failures}
+        UFP                     : {undetected_fault_percentage:.2f}%
         Fault Coverage          : {self.fault_coverage:.2f}%
+        #B-track                : {self.total_backtracks}
+        #B-trace                : {self.total_backtrace_steps}
                                   
         ================== Circuit Details ==================
         Total Cells             : {total_cells}
@@ -694,5 +836,16 @@ class PODEM:
         # Add gate types breakdown to the report string
         for gate_type, count in gate_types.items():
             report_str += f"                                  {gate_type}: {count}\n"
+
+        report_str += "\n        ================= Metrics Per Fault =================\n"
+        for fault_stat in self.per_fault_metrics:
+            detection_status = "detected" if fault_stat["detected"] else "failed"
+            report_str += (
+                "                                  "
+                f"{fault_stat['fault']}: "
+                f"#B-track={fault_stat['backtracks']}, "
+                f"#B-trace={fault_stat['backtrace_steps']} "
+                f"({detection_status})\n"
+            )
 
         return report_str

@@ -1,0 +1,110 @@
+
+    ================== PODEM Fault Coverage Report ==================
+
+        Total Faults Tested     : 82
+        Uncovered Faults        : 68
+        Undetected Faults       : 14
+        UFP                     : 17.07%
+        Fault Coverage          : 82.93%
+        #B-track                : 65
+        #B-trace                : 727
+                                  
+        ================== Circuit Details ==================
+        Total Cells             : 41
+        Gate Type Breakdown     :
+                                  input_pin: 11
+                                  output_pin: 4
+                                  NOT: 10
+                                  OR: 6
+                                  AND: 4
+                                  BUFF: 6
+
+        ================= Metrics Per Fault =================
+                                  GND sa0: #B-track=1, #B-trace=0 (failed)
+                                  GND sa1: #B-track=1, #B-trace=0 (failed)
+                                  VDD sa0: #B-track=1, #B-trace=0 (failed)
+                                  VDD sa1: #B-track=1, #B-trace=0 (failed)
+                                  CK sa0: #B-track=1, #B-trace=0 (failed)
+                                  CK sa1: #B-track=1, #B-trace=0 (failed)
+                                  reset sa0: #B-track=1, #B-trace=0 (failed)
+                                  reset sa1: #B-track=1, #B-trace=0 (failed)
+                                  G0 sa0: #B-track=1, #B-trace=4 (detected)
+                                  G0 sa1: #B-track=0, #B-trace=4 (detected)
+                                  G1 sa0: #B-track=1, #B-trace=5 (detected)
+                                  G1 sa1: #B-track=0, #B-trace=4 (detected)
+                                  output_pin_G17 sa0: #B-track=3, #B-trace=20 (detected)
+                                  output_pin_G17 sa1: #B-track=0, #B-trace=15 (detected)
+                                  G2 sa0: #B-track=1, #B-trace=3 (detected)
+                                  G2 sa1: #B-track=0, #B-trace=3 (detected)
+                                  G3 sa0: #B-track=1, #B-trace=9 (detected)
+                                  G3 sa1: #B-track=0, #B-trace=9 (detected)
+                                  _20_ sa0: #B-track=1, #B-trace=12 (detected)
+                                  _20_ sa1: #B-track=0, #B-trace=12 (detected)
+                                  output_pin__20_.d sa0: #B-track=4, #B-trace=35 (detected)
+                                  output_pin__20_.d sa1: #B-track=0, #B-trace=5 (detected)
+                                  _21_ sa0: #B-track=1, #B-trace=3 (detected)
+                                  _21_ sa1: #B-track=0, #B-trace=3 (detected)
+                                  output_pin__21_.d sa0: #B-track=1, #B-trace=31 (detected)
+                                  output_pin__21_.d sa1: #B-track=0, #B-trace=18 (detected)
+                                  _22_ sa0: #B-track=1, #B-trace=4 (detected)
+                                  _22_ sa1: #B-track=0, #B-trace=4 (detected)
+                                  output_pin__22_.d sa0: #B-track=1, #B-trace=11 (detected)
+                                  output_pin__22_.d sa1: #B-track=0, #B-trace=13 (detected)
+                                  _03_ sa0: #B-track=1, #B-trace=6 (detected)
+                                  _03_ sa1: #B-track=0, #B-trace=7 (detected)
+                                  _04_ sa0: #B-track=1, #B-trace=11 (detected)
+                                  _04_ sa1: #B-track=0, #B-trace=11 (detected)
+                                  _00_ sa0: #B-track=1, #B-trace=1 (failed)
+                                  _00_ sa1: #B-track=1, #B-trace=1 (failed)
+                                  _11_.0.0 sa0: #B-track=2, #B-trace=6 (detected)
+                                  _11_.0.0 sa1: #B-track=0, #B-trace=6 (detected)
+                                  _05_ sa0: #B-track=1, #B-trace=7 (detected)
+                                  _05_ sa1: #B-track=0, #B-trace=7 (detected)
+                                  _06_ sa0: #B-track=1, #B-trace=11 (detected)
+                                  _06_ sa1: #B-track=0, #B-trace=7 (detected)
+                                  _13_.1.0 sa0: #B-track=1, #B-trace=9 (detected)
+                                  _13_.1.0 sa1: #B-track=0, #B-trace=7 (detected)
+                                  _13_.1.1 sa0: #B-track=1, #B-trace=11 (detected)
+                                  _13_.1.1 sa1: #B-track=0, #B-trace=7 (detected)
+                                  _13_.0.0 sa0: #B-track=2, #B-trace=18 (detected)
+                                  _13_.0.0 sa1: #B-track=0, #B-trace=9 (detected)
+                                  _07_ sa0: #B-track=2, #B-trace=12 (detected)
+                                  _07_ sa1: #B-track=0, #B-trace=15 (detected)
+                                  _14_.0.0 sa0: #B-track=3, #B-trace=19 (detected)
+                                  _14_.0.0 sa1: #B-track=0, #B-trace=19 (detected)
+                                  DFF_1.D sa0: #B-track=1, #B-trace=23 (detected)
+                                  DFF_1.D sa1: #B-track=0, #B-trace=14 (detected)
+                                  G17 sa0: #B-track=3, #B-trace=16 (detected)
+                                  G17 sa1: #B-track=0, #B-trace=19 (detected)
+                                  _16_.1.0 sa0: #B-track=1, #B-trace=15 (detected)
+                                  _16_.1.0 sa1: #B-track=0, #B-trace=4 (detected)
+                                  _16_.0.0 sa0: #B-track=2, #B-trace=20 (detected)
+                                  _16_.0.0 sa1: #B-track=0, #B-trace=6 (detected)
+                                  DFF_0.D sa0: #B-track=1, #B-trace=8 (detected)
+                                  DFF_0.D sa1: #B-track=0, #B-trace=3 (detected)
+                                  _17_.0.0 sa0: #B-track=2, #B-trace=8 (detected)
+                                  _17_.0.0 sa1: #B-track=0, #B-trace=5 (detected)
+                                  DFF_2.D sa0: #B-track=1, #B-trace=7 (detected)
+                                  DFF_2.D sa1: #B-track=0, #B-trace=9 (detected)
+                                  _01_ sa0: #B-track=1, #B-trace=1 (failed)
+                                  _01_ sa1: #B-track=1, #B-trace=1 (failed)
+                                  _02_ sa0: #B-track=1, #B-trace=1 (failed)
+                                  _02_ sa1: #B-track=1, #B-trace=1 (failed)
+                                  DFF_0.Q sa0: #B-track=1, #B-trace=9 (detected)
+                                  DFF_0.Q sa1: #B-track=0, #B-trace=9 (detected)
+                                  _20_.d sa0: #B-track=4, #B-trace=30 (detected)
+                                  _20_.d sa1: #B-track=0, #B-trace=4 (detected)
+                                  DFF_1.Q sa0: #B-track=1, #B-trace=4 (detected)
+                                  DFF_1.Q sa1: #B-track=0, #B-trace=4 (detected)
+                                  _21_.d sa0: #B-track=1, #B-trace=27 (detected)
+                                  _21_.d sa1: #B-track=0, #B-trace=16 (detected)
+                                  DFF_2.Q sa0: #B-track=1, #B-trace=5 (detected)
+                                  DFF_2.Q sa1: #B-track=0, #B-trace=4 (detected)
+                                  _22_.d sa0: #B-track=1, #B-trace=9 (detected)
+                                  _22_.d sa1: #B-track=0, #B-trace=11 (detected)
+
+    ------------------------------------------------------------------
+    Total Time Taken: 6.7433 seconds
+
+    ==================================================================
+    

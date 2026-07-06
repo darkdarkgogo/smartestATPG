@@ -48,6 +48,8 @@ class Circuit:
 
         # Dictionary that maps each primary input to the corresponding gates
         self.get_gates_from_PI = {}
+        self.gate_type_to_idx = {}
+        self.max_level = 0
 
         # List of all faults in the circuit
         self.faults = []
@@ -113,6 +115,8 @@ class Circuit:
                     self.add_gate(gate_type, gate_inputs, gate_output)
 
         self.build_graph()
+        self.compute_gate_levels()
+        self.build_gate_type_index()
         # Map each primary input to the corresponding gates
         return
 
@@ -192,6 +196,33 @@ class Circuit:
                 current_gate.input_gates.append(previous_gate)
                 # Connect the previous gate to the current gate as an output gate
                 previous_gate.output_gates.append(current_gate)
+
+    def compute_gate_levels(self):
+        def dfs_level(gate):
+            if gate.type == "input_pin":
+                gate.level = 0
+                return gate.level
+            if getattr(gate, "_level_ready", False):
+                return gate.level
+
+            if gate.input_gates:
+                gate.level = 1 + max(dfs_level(prev_gate) for prev_gate in gate.input_gates)
+            else:
+                gate.level = 0
+            gate._level_ready = True
+            return gate.level
+
+        self.max_level = 0
+        for gate in self.gates.values():
+            gate._level_ready = False
+        for gate in self.gates.values():
+            self.max_level = max(self.max_level, dfs_level(gate))
+        for gate in self.gates.values():
+            del gate._level_ready
+
+    def build_gate_type_index(self):
+        gate_types = sorted({gate.type for gate in self.gates.values()})
+        self.gate_type_to_idx = {gate_type: idx for idx, gate_type in enumerate(gate_types)}
 
     def print_circuit(self):
 

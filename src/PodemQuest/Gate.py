@@ -30,6 +30,7 @@ class Gate:
         self.value = D_Value.X
         self.faulty = False
         self.fault_value = None
+        self.level = 0
 
         if type == "input_pin" or type == "output_pin":
             self.is_pin = True
