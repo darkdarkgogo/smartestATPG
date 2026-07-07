@@ -50,6 +50,7 @@ class Circuit:
         self.get_gates_from_PI = {}
         self.gate_type_to_idx = {}
         self.max_level = 0
+        self.bench_path = filename
 
         # List of all faults in the circuit
         self.faults = []

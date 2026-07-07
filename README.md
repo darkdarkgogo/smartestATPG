@@ -8,6 +8,8 @@
 
 This repository contains an implementation of the Path-Oriented Decision Making (PODEM) algorithm for Automatic Test Pattern Generation (ATPG). PODEM is a widely used method in digital circuit testing to generate test vectors that can detect faults in combinational circuits.
 
+The repository now vendors the `deepgate_recgnn_extractor` package under `vendor/` so the RL-guided flow can generate fixed gate embeddings without requiring a sibling checkout.
+
 ## How to Build 🧱
 
 To build the `podemquest` package, follow these steps:

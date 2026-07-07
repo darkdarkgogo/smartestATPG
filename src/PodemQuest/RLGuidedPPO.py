@@ -14,10 +14,8 @@ if torch.cuda.is_available():
 @dataclass
 class DecisionStep:
     mode: str
-    state_gate_type: Optional[int]
-    state_gate_level: Optional[float]
-    candidate_gate_types: list[int]
-    candidate_gate_levels: list[float]
+    state_embedding: Optional[torch.Tensor]
+    candidate_embeddings: list[torch.Tensor]
     candidate_count: int
     action: int
     logprob: torch.Tensor
@@ -35,12 +33,11 @@ class RolloutBuffer:
 
 
 class RLActorCritic(nn.Module):
-    def __init__(self, num_gate_types, max_backtrace_candidates, hidden_dim=64):
+    def __init__(self, gate_embedding_dim, max_backtrace_candidates, hidden_dim=64):
         super().__init__()
         self.max_backtrace_candidates = max_backtrace_candidates
-        self.gate_embedding = nn.Embedding(num_gate_types, hidden_dim)
-        self.level_encoder = nn.Sequential(
-            nn.Linear(1, hidden_dim),
+        self.gate_encoder = nn.Sequential(
+            nn.Linear(gate_embedding_dim, hidden_dim),
             nn.Tanh(),
         )
         self.mode_embedding = nn.Embedding(2, hidden_dim)
@@ -60,26 +57,24 @@ class RLActorCritic(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-    def encode_gate(self, gate_type_idx, gate_level, mode):
-        type_tensor = torch.tensor([gate_type_idx], dtype=torch.long, device=device)
-        level_tensor = torch.tensor([[gate_level]], dtype=torch.float32, device=device)
+    def encode_gate(self, gate_embedding, mode):
+        gate_tensor = gate_embedding.to(device=device, dtype=torch.float32).unsqueeze(0)
         mode_tensor = torch.tensor([mode], dtype=torch.long, device=device)
         return (
-            self.gate_embedding(type_tensor)
-            + self.level_encoder(level_tensor)
+            self.gate_encoder(gate_tensor)
             + self.mode_embedding(mode_tensor)
         ).squeeze(0)
 
-    def backtrace_logits(self, gate_type_idx, gate_level):
-        state_repr = self.encode_gate(gate_type_idx, gate_level, mode=0)
+    def backtrace_logits(self, gate_embedding):
+        state_repr = self.encode_gate(gate_embedding, mode=0)
         logits = self.backtrace_actor(state_repr)
         state_value = self.critic(state_repr).squeeze(-1)
         return logits, state_value
 
-    def propagation_logits(self, candidate_gate_types, candidate_gate_levels):
+    def propagation_logits(self, candidate_gate_embeddings):
         candidate_reprs = []
-        for gate_type_idx, gate_level in zip(candidate_gate_types, candidate_gate_levels):
-            candidate_reprs.append(self.encode_gate(gate_type_idx, gate_level, mode=1))
+        for gate_embedding in candidate_gate_embeddings:
+            candidate_reprs.append(self.encode_gate(gate_embedding, mode=1))
         candidate_reprs = torch.stack(candidate_reprs, dim=0)
         logits = self.propagation_actor(candidate_reprs).squeeze(-1)
         state_repr = candidate_reprs.mean(dim=0)
@@ -88,14 +83,10 @@ class RLActorCritic(nn.Module):
 
     def evaluate_step(self, step):
         if step.mode == "backtrace":
-            logits, state_value = self.backtrace_logits(
-                step.state_gate_type, step.state_gate_level
-            )
+            logits, state_value = self.backtrace_logits(step.state_embedding)
             logits = logits[: step.candidate_count]
         else:
-            logits, state_value = self.propagation_logits(
-                step.candidate_gate_types, step.candidate_gate_levels
-            )
+            logits, state_value = self.propagation_logits(step.candidate_embeddings)
 
         dist = Categorical(logits=logits)
         action_tensor = torch.tensor(step.action, dtype=torch.long, device=device)
@@ -107,8 +98,7 @@ class RLActorCritic(nn.Module):
 class RLGuidedPPOAgent:
     def __init__(
         self,
-        gate_type_to_idx,
-        max_level,
+        gate_embedding_dim,
         max_backtrace_candidates,
         lr_actor=3e-4,
         lr_critic=1e-3,
@@ -116,8 +106,6 @@ class RLGuidedPPOAgent:
         k_epochs=8,
         eps_clip=0.2,
     ):
-        self.gate_type_to_idx = gate_type_to_idx
-        self.max_level = max(max_level, 1)
         self.gamma = gamma
         self.k_epochs = k_epochs
         self.eps_clip = eps_clip
@@ -126,18 +114,17 @@ class RLGuidedPPOAgent:
         self.last_selected_mode = None
 
         self.policy = RLActorCritic(
-            num_gate_types=len(gate_type_to_idx),
+            gate_embedding_dim=gate_embedding_dim,
             max_backtrace_candidates=max_backtrace_candidates,
         ).to(device)
         self.policy_old = RLActorCritic(
-            num_gate_types=len(gate_type_to_idx),
+            gate_embedding_dim=gate_embedding_dim,
             max_backtrace_candidates=max_backtrace_candidates,
         ).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         self.optimizer = torch.optim.Adam(
             [
-                {"params": self.policy.gate_embedding.parameters(), "lr": lr_actor},
-                {"params": self.policy.level_encoder.parameters(), "lr": lr_actor},
+                {"params": self.policy.gate_encoder.parameters(), "lr": lr_actor},
                 {"params": self.policy.mode_embedding.parameters(), "lr": lr_actor},
                 {"params": self.policy.backtrace_actor.parameters(), "lr": lr_actor},
                 {"params": self.policy.propagation_actor.parameters(), "lr": lr_actor},
@@ -146,17 +133,14 @@ class RLGuidedPPOAgent:
         )
         self.mse_loss = nn.MSELoss()
 
-    def _gate_type_idx(self, gate):
-        return self.gate_type_to_idx[gate.type]
-
-    def _gate_level(self, gate):
-        return float(gate.level) / float(self.max_level)
+    def _gate_embedding(self, gate):
+        if gate.deepgate_embedding is None:
+            raise ValueError(f"Gate '{gate.outputpin}' is missing a fixed DeepGate embedding.")
+        return gate.deepgate_embedding
 
     def select_backtrace_action(self, objective_gate, candidate_gates):
-        logits, state_value = self.policy_old.backtrace_logits(
-            self._gate_type_idx(objective_gate),
-            self._gate_level(objective_gate),
-        )
+        objective_embedding = self._gate_embedding(objective_gate)
+        logits, state_value = self.policy_old.backtrace_logits(objective_embedding)
         logits = logits[: len(candidate_gates)]
         dist = Categorical(logits=logits)
         action = dist.sample()
@@ -164,10 +148,8 @@ class RLGuidedPPOAgent:
         self.buffer.steps.append(
             DecisionStep(
                 mode="backtrace",
-                state_gate_type=self._gate_type_idx(objective_gate),
-                state_gate_level=self._gate_level(objective_gate),
-                candidate_gate_types=[],
-                candidate_gate_levels=[],
+                state_embedding=objective_embedding.detach().cpu(),
+                candidate_embeddings=[],
                 candidate_count=len(candidate_gates),
                 action=int(action.item()),
                 logprob=logprob.detach(),
@@ -179,22 +161,16 @@ class RLGuidedPPOAgent:
         return candidate_gates[int(action.item())]
 
     def select_propagation_action(self, frontier_gates):
-        candidate_gate_types = [self._gate_type_idx(gate) for gate in frontier_gates]
-        candidate_gate_levels = [self._gate_level(gate) for gate in frontier_gates]
-        logits, state_value = self.policy_old.propagation_logits(
-            candidate_gate_types,
-            candidate_gate_levels,
-        )
+        candidate_embeddings = [self._gate_embedding(gate) for gate in frontier_gates]
+        logits, state_value = self.policy_old.propagation_logits(candidate_embeddings)
         dist = Categorical(logits=logits)
         action = dist.sample()
         logprob = dist.log_prob(action)
         self.buffer.steps.append(
             DecisionStep(
                 mode="propagation",
-                state_gate_type=None,
-                state_gate_level=None,
-                candidate_gate_types=candidate_gate_types,
-                candidate_gate_levels=candidate_gate_levels,
+                state_embedding=None,
+                candidate_embeddings=[embedding.detach().cpu() for embedding in candidate_embeddings],
                 candidate_count=len(frontier_gates),
                 action=int(action.item()),
                 logprob=logprob.detach(),

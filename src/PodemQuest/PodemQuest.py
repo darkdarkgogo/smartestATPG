@@ -66,6 +66,12 @@ def main():
         default=None,
         help="Optional checkpoint path for the RL-guided PODEM prototype.",
     )
+    parser.add_argument(
+        "--deepgate_checkpoint",
+        type=str,
+        default=None,
+        help="Checkpoint path for the fixed DeepGate gate embeddings used by RL mode.",
+    )
 
     ## Parse arguments
     args = parser.parse_args()
@@ -74,8 +80,11 @@ def main():
     report_file = args.report_file
     algorithm = args.algorithm
     rl_checkpoint = args.rl_checkpoint
+    deepgate_checkpoint = args.deepgate_checkpoint
     if rl_checkpoint:
         rl_checkpoint = os.path.abspath(rl_checkpoint)
+    if deepgate_checkpoint:
+        deepgate_checkpoint = os.path.abspath(deepgate_checkpoint)
 
     # Create Circuit object from the input file
     circuit = Circuit(input_file)
@@ -85,6 +94,7 @@ def main():
         circuit=circuit,
         output_file=output_file,
         rl_checkpoint_path=rl_checkpoint,
+        deepgate_checkpoint_path=deepgate_checkpoint,
     )
 
     # Start timing the PODEM computation

@@ -31,6 +31,7 @@ class Gate:
         self.faulty = False
         self.fault_value = None
         self.level = 0
+        self.deepgate_embedding = None
 
         if type == "input_pin" or type == "output_pin":
             self.is_pin = True

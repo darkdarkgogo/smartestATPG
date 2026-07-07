@@ -21,6 +21,7 @@ from .DAlgebra import D_Value
 import math
 from collections import Counter
 
+from .DeepGateBridge import load_aligned_gate_embeddings
 from .RLGuidedPPO import RLGuidedPPOAgent
 
 
@@ -30,7 +31,13 @@ class PODEM:
 
     """
 
-    def __init__(self, circuit, output_file, rl_checkpoint_path=None):
+    def __init__(
+        self,
+        circuit,
+        output_file,
+        rl_checkpoint_path=None,
+        deepgate_checkpoint_path=None,
+    ):
         """
         Initializes a PODEM object.
 
@@ -71,17 +78,21 @@ class PODEM:
         self.rl_propagation_blocked_penalty = -0.05
         self.rl_propagation_success_bonus = 0.05
         self.rl_checkpoint_path = rl_checkpoint_path
+        self.deepgate_checkpoint_path = deepgate_checkpoint_path
         self.pending_propagation_step_idx = None
         self.pending_backtrace_step_idx = None
 
     def init_rl_agent(self):
+        gate_embedding_dim = load_aligned_gate_embeddings(
+            self.circuit,
+            self.deepgate_checkpoint_path,
+        )
         max_backtrace_candidates = max(
             1,
             max(len(gate.input_gates) for gate in self.circuit.gates.values()),
         )
         self.rl_agent = RLGuidedPPOAgent(
-            gate_type_to_idx=self.circuit.gate_type_to_idx,
-            max_level=self.circuit.max_level,
+            gate_embedding_dim=gate_embedding_dim,
             max_backtrace_candidates=max_backtrace_candidates,
         )
         if self.rl_checkpoint_path:
