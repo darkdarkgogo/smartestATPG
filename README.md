@@ -10,6 +10,11 @@ This repository contains an implementation of the Path-Oriented Decision Making 
 
 The repository now vendors the `deepgate_recgnn_extractor` package under `vendor/` so the RL-guided flow can generate fixed gate embeddings without requiring a sibling checkout.
 
+For Linux usage, helper scripts are available under `scripts/`:
+
+- `scripts/train_deepgate_podem.sh`: train the DeepGate-style bench encoder used for RL guidance, defaulting to `test/`
+- `scripts/run_podem_rl.sh`: run `PodemQuest` in RL mode with a trained DeepGate checkpoint
+
 ## How to Build 🧱
 
 To build the `podemquest` package, follow these steps:
