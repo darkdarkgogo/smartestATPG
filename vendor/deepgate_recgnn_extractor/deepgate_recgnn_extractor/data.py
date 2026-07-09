@@ -12,6 +12,8 @@ class OrderedData(Data):
         self.backward_index = backward_index
 
     def __inc__(self, key, value, *args, **kwargs):
+        if key == "tt_pair_index":
+            return self.num_nodes
         if "index" in key or "face" in key:
             return self.num_nodes
         return 0
@@ -19,6 +21,6 @@ class OrderedData(Data):
     def __cat_dim__(self, key, value, *args, **kwargs):
         if key == "forward_index" or key == "backward_index":
             return 0
-        if key == "edge_index":
+        if key == "edge_index" or key == "tt_pair_index":
             return 1
         return 0

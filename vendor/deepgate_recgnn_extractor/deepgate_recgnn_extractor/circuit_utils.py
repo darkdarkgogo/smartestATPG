@@ -1,31 +1,49 @@
 from collections import Counter
 
 
+INPUT_PIN = 0
+OUTPUT_PIN = 1
+AND_GATE = 2
+NAND_GATE = 3
+OR_GATE = 4
+NOR_GATE = 5
+NOT_GATE = 6
+XOR_GATE = 7
+BUF_GATE = 8
+BUFF_GATE = 9
+XNOR_GATE = 10
+BUFFER_GATES = {BUF_GATE, BUFF_GATE}
+
+
 def logic(gate_type, signals):
-    if gate_type == 1:
+    if gate_type == INPUT_PIN:
+        return signals[0] if signals else 0
+    if gate_type == OUTPUT_PIN:
+        return signals[0] if signals else 0
+    if gate_type == AND_GATE:
         for signal in signals:
             if signal == 0:
                 return 0
         return 1
-    if gate_type == 2:
+    if gate_type == NAND_GATE:
         for signal in signals:
             if signal == 0:
                 return 1
         return 0
-    if gate_type == 3:
+    if gate_type == OR_GATE:
         for signal in signals:
             if signal == 1:
                 return 1
         return 0
-    if gate_type == 4:
+    if gate_type == NOR_GATE:
         for signal in signals:
             if signal == 1:
                 return 0
         return 1
-    if gate_type == 5:
+    if gate_type == NOT_GATE:
         for signal in signals:
             return 0 if signal == 1 else 1
-    if gate_type == 6:
+    if gate_type == XOR_GATE:
         zero_count = 0
         one_count = 0
         for signal in signals:
@@ -36,10 +54,10 @@ def logic(gate_type, signals):
         if zero_count == len(signals) or one_count == len(signals):
             return 0
         return 1
-    if gate_type == 7:
+    if gate_type in BUFFER_GATES:
         for signal in signals:
             return signal
-    if gate_type == 8:
+    if gate_type == XNOR_GATE:
         zero_count = 0
         one_count = 0
         for signal in signals:
@@ -57,35 +75,39 @@ def prob_logic(gate_type, signals):
     one = 0.0
     zero = 0.0
 
-    if gate_type == 1:
+    if gate_type == INPUT_PIN or gate_type == OUTPUT_PIN:
+        for signal in signals:
+            zero = signal[0]
+            one = signal[1]
+    elif gate_type == AND_GATE:
         mul = 1.0
         for signal in signals:
             mul *= signal[1]
         one = mul
         zero = 1.0 - mul
-    elif gate_type == 2:
+    elif gate_type == NAND_GATE:
         mul = 1.0
         for signal in signals:
             mul *= signal[1]
         zero = mul
         one = 1.0 - mul
-    elif gate_type == 3:
+    elif gate_type == OR_GATE:
         mul = 1.0
         for signal in signals:
             mul *= signal[0]
         zero = mul
         one = 1.0 - mul
-    elif gate_type == 4:
+    elif gate_type == NOR_GATE:
         mul = 1.0
         for signal in signals:
             mul *= signal[0]
         one = mul
         zero = 1.0 - mul
-    elif gate_type == 5:
+    elif gate_type == NOT_GATE:
         for signal in signals:
             one = signal[0]
             zero = signal[1]
-    elif gate_type == 6:
+    elif gate_type == XOR_GATE:
         mul0 = 1.0
         mul1 = 1.0
         for signal in signals:
@@ -94,11 +116,11 @@ def prob_logic(gate_type, signals):
             mul1 *= signal[1]
         zero = mul0 + mul1
         one = 1.0 - zero
-    elif gate_type == 7:
+    elif gate_type in BUFFER_GATES:
         for signal in signals:
             zero = signal[0]
             one = signal[1]
-    elif gate_type == 8:
+    elif gate_type == XNOR_GATE:
         mul0 = 1.0
         mul1 = 1.0
         for signal in signals:
@@ -116,7 +138,7 @@ def prob_logic(gate_type, signals):
 def obs_prob(x_data, root_idx, observability, input_signals):
     gate_type = x_data[root_idx][1]
 
-    if gate_type == 1 or gate_type == 2:
+    if gate_type == AND_GATE or gate_type == NAND_GATE:
         obs = observability[root_idx]
         for signal in input_signals:
             for other in input_signals:
@@ -124,7 +146,7 @@ def obs_prob(x_data, root_idx, observability, input_signals):
                     obs *= x_data[other][3]
             if obs < observability[signal] or observability[signal] == -1:
                 observability[signal] = obs
-    elif gate_type == 3 or gate_type == 4:
+    elif gate_type == OR_GATE or gate_type == NOR_GATE:
         obs = observability[root_idx]
         for signal in input_signals:
             for other in input_signals:
@@ -132,12 +154,12 @@ def obs_prob(x_data, root_idx, observability, input_signals):
                     obs *= x_data[other][4]
             if obs < observability[signal] or observability[signal] == -1:
                 observability[signal] = obs
-    elif gate_type == 5 or gate_type == 7:
+    elif gate_type == NOT_GATE or gate_type in BUFFER_GATES or gate_type == OUTPUT_PIN:
         obs = observability[root_idx]
         for signal in input_signals:
             if obs < observability[signal] or observability[signal] == -1:
                 observability[signal] = obs
-    elif gate_type == 6 or gate_type == 8:
+    elif gate_type == XOR_GATE or gate_type == XNOR_GATE:
         if len(input_signals) != 2:
             raise ValueError("Only 2-input XOR/XNOR is supported for observability computation")
         obs = observability[root_idx]

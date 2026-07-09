@@ -28,10 +28,14 @@ def build_circuit(parsed: ParsedBench, gate_to_index: dict) -> BuiltCircuit:
     edge_index = []
 
     for node_name in parsed.primary_inputs:
-        _new_node(name_to_index, x_data, node_name, gate_to_index["INPUT"])
+        _new_node(name_to_index, x_data, node_name, gate_to_index["input_pin"])
 
     for gate in parsed.gates:
         _new_node(name_to_index, x_data, gate["name"], gate_to_index[gate["gate_type"]])
+
+    for output_name in parsed.primary_outputs:
+        synthetic_output_name = f"output_pin_{output_name}"
+        _new_node(name_to_index, x_data, synthetic_output_name, gate_to_index["output_pin"])
 
     for gate in parsed.gates:
         dst_idx = name_to_index[gate["name"]]
@@ -40,6 +44,12 @@ def build_circuit(parsed: ParsedBench, gate_to_index: dict) -> BuiltCircuit:
                 raise ValueError(f"Unknown fanin '{src_name}' for gate '{gate['name']}'")
             edge_index.append([name_to_index[src_name], dst_idx])
 
+    for output_name in parsed.primary_outputs:
+        if output_name not in name_to_index:
+            raise ValueError(f"Unknown primary output source '{output_name}'")
+        output_idx = name_to_index[f"output_pin_{output_name}"]
+        edge_index.append([name_to_index[output_name], output_idx])
+
     fanout_list = [[] for _ in x_data]
     fanin_list = [[] for _ in x_data]
     bfs_queue = []
@@ -47,7 +57,7 @@ def build_circuit(parsed: ParsedBench, gate_to_index: dict) -> BuiltCircuit:
     max_level = 0
 
     for index, node in enumerate(x_data):
-        if node[1] == gate_to_index["INPUT"]:
+        if node[1] == gate_to_index["input_pin"]:
             bfs_queue.append(index)
             levels[index] = 0
 
@@ -79,12 +89,12 @@ def build_circuit(parsed: ParsedBench, gate_to_index: dict) -> BuiltCircuit:
     x_data, _ = identify_reconvergence(x_data, level_list, fanin_list, fanout_list)
 
     po_indices = []
-    primary_output_set = set(parsed.primary_outputs)
+    primary_output_set = {f"output_pin_{name}" for name in parsed.primary_outputs}
     gate_meta = []
     for index, node in enumerate(x_data):
         name = node[0]
-        is_pi = node[1] == gate_to_index["INPUT"]
-        is_po = (name in primary_output_set) or (len(fanout_list[index]) == 0)
+        is_pi = node[1] == gate_to_index["input_pin"]
+        is_po = node[1] == gate_to_index["output_pin"] or (name in primary_output_set)
         if is_po:
             po_indices.append(index)
         gate_meta.append(
@@ -97,6 +107,7 @@ def build_circuit(parsed: ParsedBench, gate_to_index: dict) -> BuiltCircuit:
                 "c0": node[4],
                 "co": node[5],
                 "fanout_flag": bool(node[6]),
+                "fanout_count": len(fanout_list[index]),
                 "is_reconvergent": bool(node[7]),
                 "reconv_source_index": int(node[8]),
                 "is_pi": is_pi,

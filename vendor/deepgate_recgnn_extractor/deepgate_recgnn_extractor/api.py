@@ -35,6 +35,7 @@ def _build_args(config: EncoderConfig, device):
         norm_layer=model.norm_layer,
         activation_layer=model.activation_layer,
         dim_node_feature=config.dim_node_feature,
+        num_gate_types=config.num_gate_types,
         device=device,
     )
 
@@ -53,6 +54,14 @@ def build_graph_from_bench(bench_path, config: EncoderConfig):
         forward_index=forward_index,
         backward_level=backward_level,
         backward_index=backward_index,
+    )
+    graph.gate_type = torch.tensor(
+        [meta["gate_type_id"] for meta in circuit.gate_meta],
+        dtype=torch.long,
+    )
+    graph.prob = torch.tensor(
+        [[meta["c1"]] for meta in circuit.gate_meta],
+        dtype=torch.float32,
     )
     graph.raw_x = raw_x
     graph.po_indices = torch.tensor(circuit.po_indices, dtype=torch.long)

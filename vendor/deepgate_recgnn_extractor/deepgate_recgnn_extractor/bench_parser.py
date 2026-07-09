@@ -1,10 +1,8 @@
 from dataclasses import dataclass
 
 
-SUPPORTED_GATES = {"INPUT", "AND", "NAND", "OR", "NOR", "NOT", "XOR", "BUF", "BUFF", "XNOR"}
-GATE_NAME_NORMALIZATION = {
-    "BUFF": "BUF",
-}
+SUPPORTED_GATES = {"AND", "NAND", "OR", "NOR", "NOT", "XOR", "BUF", "BUFF", "XNOR"}
+GATE_NAME_NORMALIZATION = {}
 
 
 @dataclass

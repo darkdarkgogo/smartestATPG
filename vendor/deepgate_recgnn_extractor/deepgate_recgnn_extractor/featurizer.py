@@ -10,36 +10,37 @@ def one_hot(indices, length):
 
 
 def build_model_features(circuit, config):
-    gate_list = [node[1] for node in circuit.x_data]
-    features = one_hot(gate_list, config.num_gate_types)
+    gate_type_ids = [meta["gate_type_id"] for meta in circuit.gate_meta]
+    features = one_hot(gate_type_ids, config.num_gate_types)
 
-    if config.use_node_cop:
-        c1 = torch.tensor([node[3] for node in circuit.x_data], dtype=torch.float32).unsqueeze(1)
-        features = torch.cat([features, c1], dim=1)
+    max_level = max((meta["level"] for meta in circuit.gate_meta), default=0)
+    max_fanout = max((meta["fanout_count"] for meta in circuit.gate_meta), default=0)
+    level_scale = float(max(1, max_level))
+    fanout_scale = float(max(1, max_fanout))
 
-    if config.use_node_reconv:
-        reconv = torch.tensor([node[7] for node in circuit.x_data], dtype=torch.float32).unsqueeze(1)
-        features = torch.cat([features, reconv], dim=1)
-
-    if config.include_pi_po_features:
-        pi_flags = torch.tensor([1.0 if meta["is_pi"] else 0.0 for meta in circuit.gate_meta], dtype=torch.float32).unsqueeze(1)
-        po_flags = torch.tensor([1.0 if meta["is_po"] else 0.0 for meta in circuit.gate_meta], dtype=torch.float32).unsqueeze(1)
-        features = torch.cat([features, pi_flags, po_flags], dim=1)
-
-    return features
+    levels = torch.tensor(
+        [meta["level"] / level_scale for meta in circuit.gate_meta],
+        dtype=torch.float32,
+    ).unsqueeze(1)
+    fanouts = torch.tensor(
+        [meta["fanout_count"] / fanout_scale for meta in circuit.gate_meta],
+        dtype=torch.float32,
+    ).unsqueeze(1)
+    return torch.cat([features, levels, fanouts], dim=1)
 
 
 def build_raw_feature_tensor(circuit):
     rows = []
-    for node in circuit.x_data:
+    for meta in circuit.gate_meta:
         rows.append([
-            float(node[1]),
-            float(node[2]),
-            float(node[3]),
-            float(node[4]),
-            float(node[5]),
-            float(node[6]),
-            float(node[7]),
-            float(node[8]),
+            float(meta["gate_type_id"]),
+            float(meta["level"]),
+            float(meta["c1"]),
+            float(meta["c0"]),
+            float(meta["co"]),
+            float(meta["fanout_count"]),
+            float(meta["fanout_flag"]),
+            float(meta["is_reconvergent"]),
+            float(meta["reconv_source_index"]),
         ])
     return torch.tensor(rows, dtype=torch.float32)

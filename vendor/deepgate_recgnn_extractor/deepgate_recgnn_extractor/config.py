@@ -2,15 +2,17 @@ from dataclasses import dataclass, field
 
 
 DEFAULT_GATE_TO_INDEX = {
-    "INPUT": 0,
-    "AND": 1,
-    "NAND": 2,
-    "OR": 3,
-    "NOR": 4,
-    "NOT": 5,
-    "XOR": 6,
-    "BUF": 7,
-    "XNOR": 8,
+    "input_pin": 0,
+    "output_pin": 1,
+    "AND": 2,
+    "NAND": 3,
+    "OR": 4,
+    "NOR": 5,
+    "NOT": 6,
+    "XOR": 7,
+    "BUF": 8,
+    "BUFF": 9,
+    "XNOR": 10,
 }
 
 
@@ -39,9 +41,6 @@ class ModelConfig:
 @dataclass
 class EncoderConfig:
     gate_to_index: dict = field(default_factory=lambda: DEFAULT_GATE_TO_INDEX.copy())
-    use_node_cop: bool = False
-    use_node_reconv: bool = False
-    include_pi_po_features: bool = False
     graph_pool: str = "mean"
     model: ModelConfig = field(default_factory=ModelConfig)
 
@@ -51,11 +50,4 @@ class EncoderConfig:
 
     @property
     def dim_node_feature(self) -> int:
-        dim = self.num_gate_types
-        if self.use_node_cop:
-            dim += 1
-        if self.use_node_reconv:
-            dim += 1
-        if self.include_pi_po_features:
-            dim += 2
-        return dim
+        return self.num_gate_types + 2

@@ -36,6 +36,7 @@ class RecGNN(nn.Module):
         self.mask = args.mask
 
         self.num_aggr = args.num_aggr
+        self.num_gate_types = args.num_gate_types
         self.dim_node_feature = args.dim_node_feature
         self.dim_hidden = args.dim_hidden
         self.dim_mlp = args.dim_mlp
@@ -99,9 +100,7 @@ class RecGNN(nn.Module):
             if self.reverse:
                 self.update_backward = _UPDATE_FUNCTION_FACTORY[args.update_function](self.dim_hidden, self.dim_hidden)
 
-        self.one = torch.ones(1).to(self.device)
-        self.emd_int = nn.Linear(1, self.dim_hidden)
-        self.one.requires_grad = False
+        self.gate_type_embedding = nn.Embedding(self.num_gate_types, self.dim_hidden)
 
         if self.wx_mlp:
             self.predictor = MLP(
@@ -132,7 +131,7 @@ class RecGNN(nn.Module):
         num_nodes = graph.num_nodes
         num_layers_f = max(graph.forward_level).item() + 1
         num_layers_b = max(graph.backward_level).item() + 1
-        h_init = self.emd_int(self.one).view(1, 1, -1).repeat(1, num_nodes, 1)
+        h_init = self.gate_type_embedding(graph.gate_type.to(self.device)).unsqueeze(0)
 
         if self.mask:
             h_true = torch.ones_like(h_init).to(self.device)

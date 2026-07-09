@@ -57,7 +57,10 @@ def load_aligned_gate_embeddings(circuit, checkpoint_path: str) -> int:
             raise ValueError(f"Cycle detected while resolving embedding for gate '{gate.outputpin}'.")
 
         visiting.add(gate.id)
-        if gate.type == "output_pin":
+        gate_name = gate.outputpin
+        if gate_name in embedding_by_name:
+            embedding = embedding_by_name[gate_name]
+        elif gate.type == "output_pin":
             if len(gate.input_gates) != 1:
                 raise ValueError(
                     f"Expected output pin '{gate.outputpin}' to have exactly one driver, "
@@ -65,14 +68,11 @@ def load_aligned_gate_embeddings(circuit, checkpoint_path: str) -> int:
                 )
             embedding = resolve_gate_embedding(gate.input_gates[0])
         else:
-            gate_name = gate.outputpin
-            if gate_name not in embedding_by_name:
-                available_examples = ", ".join(sorted(embedding_by_name.keys())[:10])
-                raise KeyError(
-                    f"DeepGate embedding not found for gate '{gate_name}' (type={gate.type}). "
-                    f"Sample available node names: {available_examples}"
-                )
-            embedding = embedding_by_name[gate_name]
+            available_examples = ", ".join(sorted(embedding_by_name.keys())[:10])
+            raise KeyError(
+                f"DeepGate embedding not found for gate '{gate_name}' (type={gate.type}). "
+                f"Sample available node names: {available_examples}"
+            )
 
         visiting.remove(gate.id)
         cache[gate.id] = embedding

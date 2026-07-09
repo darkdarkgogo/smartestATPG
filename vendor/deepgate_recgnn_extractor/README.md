@@ -38,9 +38,27 @@ print(result["graph_embedding"].shape)
 python -m deepgate_recgnn_extractor.cli --bench path/to/circuit.bench
 ```
 
+## Training
+
+Train a DeepGate-style bidirectional GRU encoder directly on `.bench` circuits with:
+
+- gate types aligned to `PodemQuest`
+- a 64-dim trainable gate-type embedding used as the initial hidden state
+- explicit node features: `gate one-hot + normalized level + normalized fanout`
+- forward and backward message passing repeated for multiple rounds
+- supervision from simulated gate probabilities and pairwise truth-table distances
+
+```bash
+python -m deepgate_recgnn_extractor.train \
+  --bench_dir path/to/bench_dir \
+  --save_path path/to/model.pth \
+  --epochs 30 \
+  --num_rounds 10
+```
+
 ## Notes
 
 - If no checkpoint is provided, the model runs with randomly initialized weights.
-- If you train new checkpoints with the expanded gate vocabulary, the model input now uses distinct one-hot slots for `BUF` and `XNOR`.
+- The gate vocabulary now follows `PodemQuest` and includes `input_pin` and `output_pin`.
 - The package returns both raw gate attributes and the model input tensor so downstream code can choose what to consume.
 - A practical environment for this package is Python `3.10` or `3.11` with `torch` and `torch-geometric` installed.
