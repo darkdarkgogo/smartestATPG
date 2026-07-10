@@ -26,7 +26,7 @@ setup(
     package_dir={"": "src"},  # Tell distutils packages are under src
     entry_points={
         "console_scripts": [
-            "podemquest=PodemQuest:main",  # Replace with the main function if applicable
+            "podemquest=PodemQuest.PodemQuest:main",
         ],
     },
     install_requires=[
