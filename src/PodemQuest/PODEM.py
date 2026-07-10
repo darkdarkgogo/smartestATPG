@@ -155,17 +155,34 @@ class PODEM:
                     self.fault_gate.fault_value = D_Value.ZERO
                 elif fault[1] == 1:
                     self.fault_value = D_Value.ONE
-                self.fault_gate.fault_value = D_Value.ONE
+                    self.fault_gate.fault_value = D_Value.ONE
 
                 self.init_PODEM()
                 ret = self.advanced_PODEM(use_rl=use_rl)
                 self.fault_gate.faulty = False
+                rl_update_metrics = None
                 if use_rl:
                     final_reward = (
                         self.rl_success_reward if ret else self.rl_failure_reward
                     ) - 0.05 * self.current_fault_backtracks
                     self.rl_agent.finish_episode(final_reward)
-                    self.rl_agent.update()
+                    rl_update_metrics = self.rl_agent.update()
+                    if rl_update_metrics is not None:
+                        print(
+                            "[RL] "
+                            f"update={rl_update_metrics['update']} "
+                            f"fault={self.format_fault(fault)} "
+                            f"steps={rl_update_metrics['steps']} "
+                            f"reward_sum={rl_update_metrics['reward_sum']:.4f} "
+                            f"reward_last={rl_update_metrics['reward_last']:.4f} "
+                            f"loss={rl_update_metrics['total_loss']:.4f} "
+                            f"policy_loss={rl_update_metrics['policy_loss']:.4f} "
+                            f"value_loss={rl_update_metrics['value_loss']:.4f} "
+                            f"entropy={rl_update_metrics['entropy']:.4f} "
+                            f"ratio_mean={rl_update_metrics['ratio_mean']:.4f} "
+                            f"adv_mean={rl_update_metrics['adv_mean']:.4f} "
+                            f"adv_std={rl_update_metrics['adv_std']:.4f}"
+                        )
                 self.per_fault_metrics.append(
                     {
                         "fault": self.format_fault(fault),

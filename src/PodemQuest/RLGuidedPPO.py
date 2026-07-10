@@ -149,6 +149,7 @@ class RLGuidedPPOAgent:
             ]
         )
         self.mse_loss = nn.MSELoss()
+        self.update_count = 0
 
     def _gate_embedding(self, gate):
         if gate.deepgate_embedding is None:
@@ -217,8 +218,9 @@ class RLGuidedPPOAgent:
 
     def update(self):
         if not self.buffer.steps:
-            return
+            return None
 
+        step_rewards = [step.reward for step in self.buffer.steps]
         returns = []
         discounted_reward = 0.0
         for step in reversed(self.buffer.steps):
@@ -237,24 +239,56 @@ class RLGuidedPPOAgent:
         )
         advantages = returns.detach() - old_state_values.detach()
 
+        final_metrics = None
         for _ in range(self.k_epochs):
             losses = []
+            policy_losses = []
+            value_losses = []
+            entropies = []
+            ratios = []
             for idx, step in enumerate(self.buffer.steps):
                 logprob, state_value, entropy = self.policy.evaluate_step(step)
                 ratio = torch.exp(logprob - old_logprobs[idx].detach())
                 surr1 = ratio * advantages[idx]
                 surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * advantages[idx]
+                policy_loss = -torch.min(surr1, surr2)
                 value_loss = self.mse_loss(state_value.squeeze(), returns[idx])
-                loss = -torch.min(surr1, surr2) + 0.5 * value_loss - 0.01 * entropy
+                loss = policy_loss + 0.5 * value_loss - 0.01 * entropy
                 losses.append(loss)
+                policy_losses.append(policy_loss)
+                value_losses.append(value_loss)
+                entropies.append(entropy)
+                ratios.append(ratio)
 
             total_loss = torch.stack(losses).mean()
             self.optimizer.zero_grad()
             total_loss.backward()
             self.optimizer.step()
+            final_metrics = {
+                "total_loss": float(total_loss.detach().item()),
+                "policy_loss": float(torch.stack(policy_losses).mean().detach().item()),
+                "value_loss": float(torch.stack(value_losses).mean().detach().item()),
+                "entropy": float(torch.stack(entropies).mean().detach().item()),
+                "ratio_mean": float(torch.stack(ratios).mean().detach().item()),
+            }
 
         self.policy_old.load_state_dict(self.policy.state_dict())
+        self.update_count += 1
+        metrics = {
+            "update": self.update_count,
+            "steps": len(self.buffer.steps),
+            "reward_sum": float(sum(step_rewards)),
+            "reward_last": float(step_rewards[-1]),
+            "return_mean": float(returns.mean().detach().item()),
+            "return_std": float(returns.std().detach().item()) if returns.numel() > 1 else 0.0,
+            "adv_mean": float(advantages.mean().detach().item()),
+            "adv_std": float(advantages.std().detach().item()) if advantages.numel() > 1 else 0.0,
+            "epochs": self.k_epochs,
+        }
+        if final_metrics is not None:
+            metrics.update(final_metrics)
         self.buffer.clear()
+        return metrics
 
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
