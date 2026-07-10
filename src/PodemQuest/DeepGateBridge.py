@@ -6,24 +6,49 @@ from pathlib import Path
 import torch
 
 
-def _podemquest_root() -> Path:
+def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _ensure_deepgate_importable() -> None:
-    candidate_roots = [
-        _podemquest_root() / "vendor" / "deepgate_recgnn_extractor",
-        _podemquest_root().parent / "deepgate_recgnn_extractor",
+def _candidate_project_roots() -> list[Path]:
+    base_root = _project_root()
+    return [
+        base_root,
+        base_root.parent,
+        Path.cwd(),
     ]
+
+
+def _ensure_deepgate_importable() -> None:
+    candidate_roots = []
+    for project_root in _candidate_project_roots():
+        candidate_roots.extend(
+            [
+                project_root / "vendor" / "deepgate_recgnn_extractor",
+                project_root / "deepgate_recgnn_extractor",
+            ]
+        )
+
+    seen = set()
     for deepgate_root in candidate_roots:
-        deepgate_root_str = str(deepgate_root)
-        if deepgate_root.exists() and deepgate_root_str not in sys.path:
+        resolved = deepgate_root.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        deepgate_root_str = str(resolved)
+        if resolved.exists() and deepgate_root_str not in sys.path:
             sys.path.insert(0, deepgate_root_str)
+            print(f"[DeepGateBridge] Using deepgate_recgnn_extractor from: {deepgate_root_str}")
+            return
+        if resolved.exists():
+            print(f"[DeepGateBridge] deepgate_recgnn_extractor already importable from: {deepgate_root_str}")
             return
 
     raise ModuleNotFoundError(
         "Unable to locate deepgate_recgnn_extractor. Expected it under "
-        "'PodemQuest/vendor/deepgate_recgnn_extractor' or as a sibling project."
+        "'<project-root>/vendor/deepgate_recgnn_extractor', "
+        "'<project-root>/deepgate_recgnn_extractor', "
+        "or a sibling project root on the current search path."
     )
 
 
