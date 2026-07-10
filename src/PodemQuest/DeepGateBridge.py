@@ -36,7 +36,9 @@ def load_aligned_gate_embeddings(circuit, checkpoint_path: str) -> int:
     if bench_path is None:
         raise ValueError("Circuit is missing the source .bench path required for DeepGate encoding.")
 
-    result = encode_bench(bench_path, checkpoint_path=checkpoint_path)
+    print(f"[DeepGateBridge] Loading embeddings for bench: {bench_path}")
+    print(f"[DeepGateBridge] DeepGate checkpoint: {checkpoint_path}")
+    result = encode_bench(bench_path, checkpoint_path=checkpoint_path, verbose=True)
     node_embeddings = result["node_embeddings"]
     gate_meta = result["gate_meta"]
     embedding_by_name = {
@@ -81,4 +83,8 @@ def load_aligned_gate_embeddings(circuit, checkpoint_path: str) -> int:
     for gate in circuit.gates.values():
         gate.deepgate_embedding = resolve_gate_embedding(gate)
 
+    print(
+        "[DeepGateBridge] Gate embedding alignment complete: "
+        f"mapped_gates={len(circuit.gates)} embedding_dim={int(node_embeddings.shape[1])}"
+    )
     return int(node_embeddings.shape[1])

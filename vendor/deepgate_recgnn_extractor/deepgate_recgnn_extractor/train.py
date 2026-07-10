@@ -116,7 +116,8 @@ def _sample_pairs(num_nodes, max_pairs, generator):
 
 
 def build_training_graph(bench_path, config, num_patterns, exact_pi_limit, max_pairs, seed):
-    graph, circuit = build_graph_from_bench(str(bench_path), config)
+    print(f"[DeepGate][Dataset] Parsing circuit: {bench_path}")
+    graph, circuit = build_graph_from_bench(str(bench_path), config, verbose=False)
     signatures, probabilities = _simulate_signatures(
         circuit=circuit,
         num_patterns=num_patterns,
@@ -136,6 +137,12 @@ def build_training_graph(bench_path, config, num_patterns, exact_pi_limit, max_p
     graph.prob = probabilities
     graph.tt_pair_index = pair_index
     graph.tt_dis = torch.stack(tt_distance)
+    print(
+        "[DeepGate][Dataset] Prepared graph: "
+        f"name={Path(bench_path).name} nodes={graph.num_nodes} "
+        f"edges={graph.edge_index.size(1)} pairs={graph.tt_dis.numel()} "
+        f"pi={sum(1 for meta in circuit.gate_meta if meta['is_pi'])}"
+    )
     return graph
 
 
@@ -144,8 +151,11 @@ def load_training_graphs(bench_dir, config, num_patterns, exact_pi_limit, max_pa
     if not bench_paths:
         raise ValueError(f"No .bench files found under '{bench_dir}'.")
 
+    print(f"[DeepGate] Loading training benches from: {bench_dir}")
+    print(f"[DeepGate] Found {len(bench_paths)} bench circuits")
     graphs = []
     for index, bench_path in enumerate(bench_paths):
+        print(f"[DeepGate] ({index + 1}/{len(bench_paths)}) build graph for {bench_path.name}")
         graphs.append(
             build_training_graph(
                 bench_path=bench_path,
@@ -172,7 +182,9 @@ def run_epoch(model, loader, optimizer, device, prob_weight, func_weight):
     total_func = 0.0
     total_graphs = 0
 
-    for batch in loader:
+    phase = "train" if is_train else "val"
+    print(f"[DeepGate] Start {phase} epoch pass: batches={len(loader)}")
+    for batch_idx, batch in enumerate(loader, start=1):
         batch = batch.to(device)
         predictions = model(batch)
         prob_pred = predictions[-1]
@@ -196,6 +208,11 @@ def run_epoch(model, loader, optimizer, device, prob_weight, func_weight):
         total_prob += prob_loss.item() * batch_graphs
         total_func += func_loss.item() * batch_graphs
         total_graphs += batch_graphs
+        print(
+            f"[DeepGate][{phase}] batch={batch_idx}/{len(loader)} "
+            f"graphs={batch_graphs} loss={loss.item():.4f} "
+            f"prob={prob_loss.item():.4f} func={func_loss.item():.4f}"
+        )
 
     return {
         "loss": total_loss / max(1, total_graphs),
@@ -222,12 +239,19 @@ def main():
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu", help="Training device.")
     args = parser.parse_args()
 
+    print(f"[DeepGate] Training settings: {args}")
     torch.manual_seed(args.seed)
     random.seed(args.seed)
 
     config = EncoderConfig()
     config.model.num_rounds = args.num_rounds
     device = torch.device(args.device)
+    print(
+        "[DeepGate] Model config: "
+        f"hidden={config.model.dim_hidden} rounds={config.model.num_rounds} "
+        f"reverse={config.model.reverse} feature_dim={config.dim_node_feature}"
+    )
+    print(f"[DeepGate] Using device: {device}")
     model = RecGNN(_build_model_args(config, device)).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -240,6 +264,10 @@ def main():
         seed=args.seed,
     )
     train_graphs, val_graphs = split_graphs(graphs, args.train_ratio)
+    print(
+        f"[DeepGate] Dataset split: train_graphs={len(train_graphs)} "
+        f"val_graphs={len(val_graphs)}"
+    )
     train_loader = DataLoader(train_graphs, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_graphs, batch_size=args.batch_size, shuffle=False)
 
@@ -248,6 +276,7 @@ def main():
     save_path.parent.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, args.epochs + 1):
+        print(f"[DeepGate] ===== Epoch {epoch}/{args.epochs} =====")
         train_metrics = run_epoch(
             model,
             train_loader,
@@ -269,6 +298,7 @@ def main():
         if val_metrics["loss"] < best_val_loss:
             best_val_loss = val_metrics["loss"]
             torch.save(model.state_dict(), save_path)
+            print(f"[DeepGate] New best checkpoint saved to: {save_path}")
 
         print(
             f"epoch={epoch} "

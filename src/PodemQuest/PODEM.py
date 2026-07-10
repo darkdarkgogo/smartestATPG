@@ -140,10 +140,18 @@ class PODEM:
             test_vectors = []  # Initialize an empty list to store the test vectors
             total_faults = len(self.circuit.faults)  # Total number of faults to process
             progress_threshold = max(1, total_faults // 20)  # Every 5% of total faults
+            print(
+                f"[PODEM] Starting {algorithm} mode: "
+                f"total_faults={total_faults} use_rl={use_rl}"
+            )
 
             for idx, fault in enumerate(self.circuit.faults):
                 self.current_fault_backtracks = 0
                 self.current_fault_backtrace_steps = 0
+                print(
+                    f"[PODEM] >>> Fault {idx + 1}/{total_faults}: "
+                    f"{self.format_fault(fault)}"
+                )
                 fault_site = fault[0]
                 self.fault_gate = self.circuit.gates[fault_site]
                 self.fault_gate.faulty = True
@@ -178,11 +186,13 @@ class PODEM:
                     success_vector = "".join(
                         ["0" if char == "X" else char for char in success_vector]
                     )
+                    print(f"[PODEM] Fault detected. test_vector={success_vector}")
                     test_vectors.append(
                         str(self.uncovered_faults) + ": " + f"{success_vector}\n"
                     )
                 else:
                     self.failures += 1
+                    print("[PODEM] Fault not detected.")
 
                 # Print progress bar for every 5% completion
                 print(
@@ -190,6 +200,11 @@ class PODEM:
                     f"fault: {self.format_fault(fault)}, "
                     f"#B-track: {self.current_fault_backtracks}, "
                     f"#B-trace: {self.current_fault_backtrace_steps}"
+                )
+                print(
+                    f"[PODEM] <<< Fault summary: detected={ret} "
+                    f"backtracks={self.current_fault_backtracks} "
+                    f"backtrace_steps={self.current_fault_backtrace_steps}"
                 )
                 if (idx + 1) % progress_threshold == 0 or idx == total_faults - 1:
                     percentage_done = (idx + 1) / total_faults * 100
@@ -205,6 +220,11 @@ class PODEM:
                 f.writelines(test_vectors)
             if use_rl and self.rl_checkpoint_path:
                 self.rl_agent.save(self.rl_checkpoint_path)
+            print(
+                f"[PODEM] Finished {algorithm} mode: "
+                f"detected_faults={self.uncovered_faults} failures={self.failures} "
+                f"output_file={self.output_file}"
+            )
 
         return
 

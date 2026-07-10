@@ -127,11 +127,19 @@ class RecGNN(nn.Module):
 
         self.last_node_embedding = None
 
+    def _log(self, message):
+        if getattr(self.args, "verbose", False):
+            print(message)
+
     def forward(self, graph):
         num_nodes = graph.num_nodes
         num_layers_f = max(graph.forward_level).item() + 1
         num_layers_b = max(graph.backward_level).item() + 1
         h_init = self.gate_type_embedding(graph.gate_type.to(self.device)).unsqueeze(0)
+        self._log(
+            "[DeepGate] Forward start: "
+            f"num_nodes={num_nodes} forward_levels={num_layers_f} backward_levels={num_layers_b}"
+        )
 
         if self.mask:
             h_true = torch.ones_like(h_init).to(self.device)
@@ -158,7 +166,9 @@ class RecGNN(nn.Module):
         node_state = (h_init, torch.zeros(1, num_nodes, self.dim_hidden).to(self.device))
         preds = []
 
-        for _ in range(self.num_rounds):
+        for round_idx in range(self.num_rounds):
+            if getattr(self.args, "log_rounds", False):
+                self._log(f"[DeepGate] Round {round_idx + 1}/{self.num_rounds}: forward propagation")
             for level_idx in range(1, num_layers_f):
                 layer_mask = graph.forward_level == level_idx
                 layer_nodes = graph.forward_index[layer_mask]
@@ -180,6 +190,8 @@ class RecGNN(nn.Module):
                 node_state[1][:, layer_nodes, :] = layer_state[1]
 
             if self.reverse:
+                if getattr(self.args, "log_rounds", False):
+                    self._log(f"[DeepGate] Round {round_idx + 1}/{self.num_rounds}: backward propagation")
                 for level_idx in range(1, num_layers_b):
                     layer_mask = graph.backward_level == level_idx
                     layer_nodes = graph.backward_index[layer_mask]
@@ -220,7 +232,9 @@ class RecGNN(nn.Module):
         node_state = h_init
         preds = []
 
-        for _ in range(self.num_rounds):
+        for round_idx in range(self.num_rounds):
+            if getattr(self.args, "log_rounds", False):
+                self._log(f"[DeepGate] Round {round_idx + 1}/{self.num_rounds}: forward propagation")
             for level_idx in range(1, num_layers_f):
                 layer_mask = graph.forward_level == level_idx
                 layer_nodes = graph.forward_index[layer_mask]
@@ -240,6 +254,8 @@ class RecGNN(nn.Module):
                     node_state = self.imply_mask(graph, node_state, h_true, h_false)
 
             if self.reverse:
+                if getattr(self.args, "log_rounds", False):
+                    self._log(f"[DeepGate] Round {round_idx + 1}/{self.num_rounds}: backward propagation")
                 for level_idx in range(1, num_layers_b):
                     layer_mask = graph.backward_level == level_idx
                     layer_nodes = graph.backward_index[layer_mask]

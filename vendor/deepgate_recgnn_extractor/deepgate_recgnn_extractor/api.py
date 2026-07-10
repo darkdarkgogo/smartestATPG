@@ -36,11 +36,15 @@ def _build_args(config: EncoderConfig, device):
         activation_layer=model.activation_layer,
         dim_node_feature=config.dim_node_feature,
         num_gate_types=config.num_gate_types,
+        verbose=False,
+        log_rounds=False,
         device=device,
     )
 
 
-def build_graph_from_bench(bench_path, config: EncoderConfig):
+def build_graph_from_bench(bench_path, config: EncoderConfig, verbose: bool = False):
+    if verbose:
+        print(f"[DeepGate] Parsing bench netlist: {bench_path}")
     parsed = parse_bench(bench_path)
     circuit = build_circuit(parsed, config.gate_to_index)
     model_x = build_model_features(circuit, config)
@@ -65,6 +69,12 @@ def build_graph_from_bench(bench_path, config: EncoderConfig):
     )
     graph.raw_x = raw_x
     graph.po_indices = torch.tensor(circuit.po_indices, dtype=torch.long)
+    if verbose:
+        print(
+            "[DeepGate] Built graph: "
+            f"nodes={graph.num_nodes} edges={graph.edge_index.size(1)} "
+            f"po_nodes={len(circuit.po_indices)} feature_dim={graph.x.size(1)}"
+        )
     return graph, circuit
 
 
@@ -85,19 +95,42 @@ def load_model(config: Optional[EncoderConfig] = None, checkpoint_path=None, dev
 
 
 @torch.no_grad()
-def encode_bench(bench_path, model=None, checkpoint_path=None, config: Optional[EncoderConfig] = None, device=None):
+def encode_bench(
+    bench_path,
+    model=None,
+    checkpoint_path=None,
+    config: Optional[EncoderConfig] = None,
+    device=None,
+    verbose: bool = False,
+):
     if config is None:
         config = EncoderConfig()
     if device is None:
         device = torch.device("cpu")
     if model is None:
+        if verbose:
+            print(f"[DeepGate] Loading checkpoint: {checkpoint_path or '<random-init>'}")
         model = load_model(config=config, checkpoint_path=checkpoint_path, device=device)
+    if hasattr(model, "args"):
+        model.args.verbose = verbose
+        model.args.log_rounds = verbose
 
-    graph, circuit = build_graph_from_bench(bench_path, config)
+    graph, circuit = build_graph_from_bench(bench_path, config, verbose=verbose)
     graph = graph.to(device)
+    if verbose:
+        print(
+            f"[DeepGate] Start message passing: rounds={model.args.num_rounds} "
+            f"reverse={model.args.reverse} device={device}"
+        )
     predictions = model(graph)
     node_embeddings = model.last_node_embedding.detach().cpu()
     graph_embedding = pool_graph(node_embeddings, method=config.graph_pool)
+    if verbose:
+        print(
+            "[DeepGate] Encoding complete: "
+            f"node_embeddings={tuple(node_embeddings.shape)} "
+            f"graph_embedding={tuple(graph_embedding.shape)}"
+        )
 
     return {
         "node_embeddings": node_embeddings,

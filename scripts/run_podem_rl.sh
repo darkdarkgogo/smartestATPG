@@ -17,6 +17,14 @@ mkdir -p "$(dirname "${RL_CKPT}")"
 
 cd "${PROJECT_DIR}"
 
+echo "[PodemQuest] Project directory: ${PROJECT_DIR}"
+echo "[PodemQuest] Input bench: ${INPUT_BENCH}"
+echo "[PodemQuest] Output file: ${OUTPUT_FILE}"
+echo "[PodemQuest] Report file: ${REPORT_FILE}"
+echo "[PodemQuest] DeepGate checkpoint: ${DEEPGATE_CKPT}"
+echo "[PodemQuest] RL checkpoint: ${RL_CKPT}"
+echo "[PodemQuest] Starting RL-guided PODEM run..."
+
 python -m PodemQuest.PodemQuest \
   -i "${INPUT_BENCH}" \
   -o "${OUTPUT_FILE}" \
@@ -24,3 +32,5 @@ python -m PodemQuest.PodemQuest \
   -a rl \
   --deepgate_checkpoint "${DEEPGATE_CKPT}" \
   --rl_checkpoint "${RL_CKPT}"
+
+echo "[PodemQuest] RL-guided PODEM run finished."
