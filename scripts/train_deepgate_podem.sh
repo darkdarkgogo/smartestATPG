@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export PYTHONPATH="${ROOT_DIR}/PodemQuest/vendor/deepgate_recgnn_extractor:${PYTHONPATH:-}"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="${PROJECT_DIR}/vendor/deepgate_recgnn_extractor:${PYTHONPATH:-}"
 
-BENCH_DIR="${1:-${ROOT_DIR}/PodemQuest/test}"
-SAVE_PATH="${2:-${ROOT_DIR}/PodemQuest/checkpoints/podem_deepgate.pth}"
+BENCH_DIR="${1:-${PROJECT_DIR}/test}"
+SAVE_PATH="${2:-${PROJECT_DIR}/checkpoints/podem_deepgate.pth}"
 DEVICE="${3:-cuda}"
 EPOCHS="${EPOCHS:-30}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
@@ -20,6 +20,8 @@ FUNC_WEIGHT="${FUNC_WEIGHT:-1.0}"
 SEED="${SEED:-7}"
 
 mkdir -p "$(dirname "${SAVE_PATH}")"
+
+cd "${PROJECT_DIR}"
 
 python -m deepgate_recgnn_extractor.train \
   --bench_dir "${BENCH_DIR}" \

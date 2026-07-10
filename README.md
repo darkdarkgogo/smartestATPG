@@ -15,6 +15,14 @@ For Linux usage, helper scripts are available under `scripts/`:
 - `scripts/train_deepgate_podem.sh`: train the DeepGate-style bench encoder used for RL guidance, defaulting to `test/`
 - `scripts/run_podem_rl.sh`: run `PodemQuest` in RL mode with a trained DeepGate checkpoint
 
+Both scripts are designed to be run from inside the `PodemQuest/` directory:
+
+```bash
+cd PodemQuest
+bash ./scripts/train_deepgate_podem.sh
+bash ./scripts/run_podem_rl.sh
+```
+
 ## How to Build 🧱
 
 To build the `podemquest` package, follow these steps:
