@@ -87,13 +87,8 @@ class PODEM:
             self.circuit,
             self.deepgate_checkpoint_path,
         )
-        max_backtrace_candidates = max(
-            1,
-            max(len(gate.input_gates) for gate in self.circuit.gates.values()),
-        )
         self.rl_agent = RLGuidedPPOAgent(
             gate_embedding_dim=gate_embedding_dim,
-            max_backtrace_candidates=max_backtrace_candidates,
         )
         if self.rl_checkpoint_path:
             try:

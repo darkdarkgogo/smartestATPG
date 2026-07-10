@@ -16,7 +16,6 @@ class DecisionStep:
     mode: str
     state_embedding: Optional[torch.Tensor]
     candidate_embeddings: list[torch.Tensor]
-    candidate_count: int
     action: int
     logprob: torch.Tensor
     state_value: torch.Tensor
@@ -33,21 +32,21 @@ class RolloutBuffer:
 
 
 class RLActorCritic(nn.Module):
-    def __init__(self, gate_embedding_dim, max_backtrace_candidates, hidden_dim=64):
+    def __init__(self, gate_embedding_dim, hidden_dim=64):
         super().__init__()
-        self.max_backtrace_candidates = max_backtrace_candidates
+        self.hidden_dim = hidden_dim
         self.gate_encoder = nn.Sequential(
             nn.Linear(gate_embedding_dim, hidden_dim),
             nn.Tanh(),
         )
         self.mode_embedding = nn.Embedding(2, hidden_dim)
         self.backtrace_actor = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.Tanh(),
-            nn.Linear(hidden_dim, max_backtrace_candidates),
+            nn.Linear(hidden_dim, 1),
         )
         self.propagation_actor = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim * 2, hidden_dim),
             nn.Tanh(),
             nn.Linear(hidden_dim, 1),
         )
@@ -65,9 +64,24 @@ class RLActorCritic(nn.Module):
             + self.mode_embedding(mode_tensor)
         ).squeeze(0)
 
-    def backtrace_logits(self, gate_embedding):
-        state_repr = self.encode_gate(gate_embedding, mode=0)
-        logits = self.backtrace_actor(state_repr)
+    def build_backtrace_pair_repr(self, objective_embedding, candidate_embedding):
+        objective_repr = self.encode_gate(objective_embedding, mode=0)
+        candidate_repr = self.encode_gate(candidate_embedding, mode=0)
+        pair_repr = torch.cat([objective_repr, candidate_repr], dim=-1)
+        return pair_repr, objective_repr
+
+    def backtrace_logits(self, objective_embedding, candidate_gate_embeddings):
+        pair_reprs = []
+        objective_repr = None
+        for candidate_embedding in candidate_gate_embeddings:
+            pair_repr, objective_repr = self.build_backtrace_pair_repr(
+                objective_embedding,
+                candidate_embedding,
+            )
+            pair_reprs.append(pair_repr)
+        pair_reprs = torch.stack(pair_reprs, dim=0)
+        logits = self.backtrace_actor(pair_reprs).squeeze(-1)
+        state_repr = objective_repr
         state_value = self.critic(state_repr).squeeze(-1)
         return logits, state_value
 
@@ -76,15 +90,21 @@ class RLActorCritic(nn.Module):
         for gate_embedding in candidate_gate_embeddings:
             candidate_reprs.append(self.encode_gate(gate_embedding, mode=1))
         candidate_reprs = torch.stack(candidate_reprs, dim=0)
-        logits = self.propagation_actor(candidate_reprs).squeeze(-1)
         state_repr = candidate_reprs.mean(dim=0)
+        pair_reprs = []
+        for candidate_repr in candidate_reprs:
+            pair_reprs.append(torch.cat([state_repr, candidate_repr], dim=-1))
+        pair_reprs = torch.stack(pair_reprs, dim=0)
+        logits = self.propagation_actor(pair_reprs).squeeze(-1)
         state_value = self.critic(state_repr).squeeze(-1)
         return logits, state_value
 
     def evaluate_step(self, step):
         if step.mode == "backtrace":
-            logits, state_value = self.backtrace_logits(step.state_embedding)
-            logits = logits[: step.candidate_count]
+            logits, state_value = self.backtrace_logits(
+                step.state_embedding,
+                step.candidate_embeddings,
+            )
         else:
             logits, state_value = self.propagation_logits(step.candidate_embeddings)
 
@@ -99,7 +119,6 @@ class RLGuidedPPOAgent:
     def __init__(
         self,
         gate_embedding_dim,
-        max_backtrace_candidates,
         lr_actor=3e-4,
         lr_critic=1e-3,
         gamma=0.99,
@@ -115,11 +134,9 @@ class RLGuidedPPOAgent:
 
         self.policy = RLActorCritic(
             gate_embedding_dim=gate_embedding_dim,
-            max_backtrace_candidates=max_backtrace_candidates,
         ).to(device)
         self.policy_old = RLActorCritic(
             gate_embedding_dim=gate_embedding_dim,
-            max_backtrace_candidates=max_backtrace_candidates,
         ).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         self.optimizer = torch.optim.Adam(
@@ -140,8 +157,11 @@ class RLGuidedPPOAgent:
 
     def select_backtrace_action(self, objective_gate, candidate_gates):
         objective_embedding = self._gate_embedding(objective_gate)
-        logits, state_value = self.policy_old.backtrace_logits(objective_embedding)
-        logits = logits[: len(candidate_gates)]
+        candidate_embeddings = [self._gate_embedding(gate) for gate in candidate_gates]
+        logits, state_value = self.policy_old.backtrace_logits(
+            objective_embedding,
+            candidate_embeddings,
+        )
         dist = Categorical(logits=logits)
         action = dist.sample()
         logprob = dist.log_prob(action)
@@ -149,8 +169,7 @@ class RLGuidedPPOAgent:
             DecisionStep(
                 mode="backtrace",
                 state_embedding=objective_embedding.detach().cpu(),
-                candidate_embeddings=[],
-                candidate_count=len(candidate_gates),
+                candidate_embeddings=[embedding.detach().cpu() for embedding in candidate_embeddings],
                 action=int(action.item()),
                 logprob=logprob.detach(),
                 state_value=state_value.detach(),
@@ -171,7 +190,6 @@ class RLGuidedPPOAgent:
                 mode="propagation",
                 state_embedding=None,
                 candidate_embeddings=[embedding.detach().cpu() for embedding in candidate_embeddings],
-                candidate_count=len(frontier_gates),
                 action=int(action.item()),
                 logprob=logprob.detach(),
                 state_value=state_value.detach(),
