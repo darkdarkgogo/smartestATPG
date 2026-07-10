@@ -21,9 +21,6 @@ from .DAlgebra import D_Value
 import math
 from collections import Counter
 
-from .DeepGateBridge import load_aligned_gate_embeddings
-from .RLGuidedPPO import RLGuidedPPOAgent
-
 
 class PODEM:
     """
@@ -83,6 +80,9 @@ class PODEM:
         self.pending_backtrace_step_idx = None
 
     def init_rl_agent(self):
+        from .DeepGateBridge import load_aligned_gate_embeddings
+        from .RLGuidedPPO import RLGuidedPPOAgent
+
         gate_embedding_dim = load_aligned_gate_embeddings(
             self.circuit,
             self.deepgate_checkpoint_path,
